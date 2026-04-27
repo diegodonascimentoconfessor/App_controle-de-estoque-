@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EstoqueApp</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">📦</span>
+        <span class="logo-text">Estoque<b>App</b></span>
+      </div>
+      <button class="sidebar-close" id="sidebarClose">✕</button>
+    </div>
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">▦</span> Dashboard
+      </a>
+      <a href="#" class="nav-item" data-page="produtos">
+        <span class="nav-icon">◈</span> Produtos
+      </a>
+      <a href="#" class="nav-item" data-page="movimentacoes">
+        <span class="nav-icon">⇅</span> Movimentações
+      </a>
+      <a href="#" class="nav-item" data-page="alertas">
+        <span class="nav-icon">◉</span> Alertas
+        <span class="badge" id="badgeAlertas">0</span>
+      </a>
+    </nav>
+    <div class="sidebar-footer">v1.0 · Local Storage</div>
+  </aside>
+
+  <!-- OVERLAY MOBILE -->
+  <div class="overlay" id="overlay"></div>
+
+  <!-- MAIN -->
+  <div class="main-wrapper">
+    <header class="topbar">
+      <button class="menu-btn" id="menuBtn">☰</button>
+      <h1 class="page-title" id="pageTitle">Dashboard</h1>
+      <button class="btn-primary" id="btnAddProduto">+ Produto</button>
+    </header>
+
+    <!-- DASHBOARD -->
+    <section class="page active" id="page-dashboard">
+      <div class="cards-grid">
+        <div class="card card--highlight">
+          <p class="card-label">Total de Produtos</p>
+          <h2 class="card-value" id="totalProdutos">0</h2>
+        </div>
+        <div class="card">
+          <p class="card-label">Itens em Estoque</p>
+          <h2 class="card-value" id="totalItens">0</h2>
+        </div>
+        <div class="card card--warn">
+          <p class="card-label">Estoque Crítico</p>
+          <h2 class="card-value" id="totalCritico">0</h2>
+        </div>
+        <div class="card">
+          <p class="card-label">Categorias</p>
+          <h2 class="card-value" id="totalCategorias">0</h2>
+        </div>
+      </div>
+
+      <div class="section-title">Movimentações Recentes</div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Produto</th><th>Tipo</th><th>Qtd</th><th>Data</th></tr>
+          </thead>
+          <tbody id="tbodyMovRecentes"></tbody>
+        </table>
+        <div class="empty-state" id="emptyMovRecentes">Nenhuma movimentação ainda.</div>
+      </div>
+    </section>
+
+    <!-- PRODUTOS -->
+    <section class="page" id="page-produtos">
+      <div class="toolbar">
+        <input type="text" class="search-input" id="searchProduto" placeholder="Buscar produto…" />
+        <select class="select-filter" id="filterCategoria">
+          <option value="">Todas as categorias</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Nome</th><th>Categoria</th><th>Qtd</th><th>Mín.</th><th>Preço</th><th>Ações</th></tr>
+          </thead>
+          <tbody id="tbodyProdutos"></tbody>
+        </table>
+        <div class="empty-state" id="emptyProdutos">Nenhum produto cadastrado.</div>
+      </div>
+    </section>
+
+    <!-- MOVIMENTAÇÕES -->
+    <section class="page" id="page-movimentacoes">
+      <div class="toolbar">
+        <select class="select-filter" id="filterTipoMov">
+          <option value="">Todos os tipos</option>
+          <option value="entrada">Entrada</option>
+          <option value="saida">Saída</option>
+        </select>
+      </div>
+      <div class="table-wrap">
+        <table class="table">
+          <thead>
+            <tr><th>Produto</th><th>Tipo</th><th>Qtd</th><th>Obs.</th><th>Data</th></tr>
+          </thead>
+          <tbody id="tbodyMovimentacoes"></tbody>
+        </table>
+        <div class="empty-state" id="emptyMovimentacoes">Nenhuma movimentação registrada.</div>
+      </div>
+    </section>
+
+    <!-- ALERTAS -->
+    <section class="page" id="page-alertas">
+      <div class="section-title">Produtos com estoque abaixo do mínimo</div>
+      <div id="listaAlertas" class="alertas-list"></div>
+      <div class="empty-state" id="emptyAlertas" style="display:none">Nenhum alerta no momento 🎉</div>
+    </section>
+  </div>
+
+  <!-- MODAL PRODUTO -->
+  <div class="modal-backdrop" id="modalProduto">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalTitulo">Novo Produto</h2>
+        <button class="modal-close" id="modalClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="produtoId" />
+        <label>Nome *</label>
+        <input type="text" id="inputNome" class="input" placeholder="Ex: Caneta Azul" />
+
+        <label>Categoria *</label>
+        <input type="text" id="inputCategoria" class="input" placeholder="Ex: Papelaria" list="categoriasList" />
+        <datalist id="categoriasList"></datalist>
+
+        <div class="form-row">
+          <div>
+            <label>Quantidade inicial</label>
+            <input type="number" id="inputQtd" class="input" value="0" min="0" />
+          </div>
+          <div>
+            <label>Estoque mínimo</label>
+            <input type="number" id="inputMin" class="input" value="5" min="0" />
+          </div>
+        </div>
+
+        <label>Preço unitário (R$)</label>
+        <input type="number" id="inputPreco" class="input" value="0" min="0" step="0.01" />
+
+        <label>Descrição</label>
+        <textarea id="inputDesc" class="input" rows="2" placeholder="Opcional…"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btnCancelarProduto">Cancelar</button>
+        <button class="btn-primary" id="btnSalvarProduto">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL MOVIMENTAÇÃO -->
+  <div class="modal-backdrop" id="modalMov">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modalMovTitulo">Movimentar Estoque</h2>
+        <button class="modal-close" id="modalMovClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="movProdutoId" />
+        <p id="movProdutoNome" class="mov-produto-nome"></p>
+
+        <label>Tipo *</label>
+        <div class="toggle-group">
+          <button class="toggle-btn active" data-tipo="entrada">↑ Entrada</button>
+          <button class="toggle-btn" data-tipo="saida">↓ Saída</button>
+        </div>
+        <input type="hidden" id="movTipo" value="entrada" />
+
+        <label>Quantidade *</label>
+        <input type="number" id="movQtd" class="input" value="1" min="1" />
+
+        <label>Observação</label>
+        <input type="text" id="movObs" class="input" placeholder="Opcional…" />
+      </div>
+      <div class="modal-footer">
+        <button class="btn-secondary" id="btnCancelarMov">Cancelar</button>
+        <button class="btn-primary" id="btnSalvarMov">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>
