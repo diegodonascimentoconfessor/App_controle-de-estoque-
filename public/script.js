@@ -33,12 +33,14 @@ const db = getFirestore(app);
 const state = {
   produtos: [],
   movimentacoes: [],
+  clienteId: null,
 };
 
 /* ===== SINCRONIZAÇÃO EM TEMPO REAL (FIRESTORE) ===== */
 async function autenticarAnonimamente() {
   try {
-    await signInAnonymously(auth);
+    const credential = await signInAnonymously(auth);
+    state.clienteId = credential.user.uid;
   } catch (error) {
     console.error("Erro ao autenticar: ", error);
     toast("Ative a autenticação anônima no Firebase para usar o sistema.", "error");
@@ -46,10 +48,20 @@ async function autenticarAnonimamente() {
   }
 }
 
+function clienteCollection(nomeColecao) {
+  if (!state.clienteId) throw new Error("Cliente ainda nao autenticado.");
+  return collection(db, "clientes", state.clienteId, nomeColecao);
+}
+
+function clienteDoc(nomeColecao, id) {
+  if (!state.clienteId) throw new Error("Cliente ainda nao autenticado.");
+  return doc(db, "clientes", state.clienteId, nomeColecao, id);
+}
+
 // Substitui a antiga função carregar(). Fica escutando as mudanças no banco.
 function iniciarSincronizacao() {
   // Escuta a coleção de produtos
-  onSnapshot(collection(db, "produtos"), (snapshot) => {
+  onSnapshot(clienteCollection("produtos"), (snapshot) => {
     state.produtos = [];
     snapshot.forEach((doc) => {
       state.produtos.push({ id: doc.id, ...doc.data() });
@@ -63,7 +75,7 @@ function iniciarSincronizacao() {
   });
 
   // Escuta a coleção de movimentações
-  onSnapshot(collection(db, "movimentacoes"), (snapshot) => {
+  onSnapshot(clienteCollection("movimentacoes"), (snapshot) => {
     state.movimentacoes = [];
     snapshot.forEach((doc) => {
       state.movimentacoes.push({ id: doc.id, ...doc.data() });
@@ -78,7 +90,7 @@ function iniciarSincronizacao() {
 // Funções para salvar/deletar diretamente no banco de dados
 async function dbSalvarProduto(produto) {
   try {
-    await setDoc(doc(db, "produtos", produto.id), produto);
+    await setDoc(clienteDoc("produtos", produto.id), produto);
   } catch (error) {
     console.error("Erro ao salvar produto: ", error);
     toast("Erro ao conectar com o servidor.", "error");
@@ -87,7 +99,7 @@ async function dbSalvarProduto(produto) {
 
 async function dbExcluirProduto(id) {
   try {
-    await deleteDoc(doc(db, "produtos", id));
+    await deleteDoc(clienteDoc("produtos", id));
   } catch (error) {
     console.error("Erro ao excluir produto: ", error);
   }
@@ -95,7 +107,7 @@ async function dbExcluirProduto(id) {
 
 async function dbSalvarMovimentacao(mov) {
   try {
-    await setDoc(doc(db, "movimentacoes", mov.id), mov);
+    await setDoc(clienteDoc("movimentacoes", mov.id), mov);
   } catch (error) {
     console.error("Erro ao salvar movimentação: ", error);
   }

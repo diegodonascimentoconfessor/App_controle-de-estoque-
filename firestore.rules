@@ -44,16 +44,24 @@ service cloud.firestore {
       && validString(request.resource.data.data, 40);
     }
 
-    match /produtos/{produtoId} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() && validProduto(produtoId);
-      allow delete: if signedIn();
+    function isCliente(clienteId) {
+      return signedIn() && request.auth.uid == clienteId;
     }
 
-    match /movimentacoes/{movimentacaoId} {
-      allow read: if signedIn();
-      allow create, update: if signedIn() && validMovimentacao(movimentacaoId);
-      allow delete: if signedIn();
+    match /clientes/{clienteId} {
+      allow read, write: if false;
+
+      match /produtos/{produtoId} {
+        allow read: if isCliente(clienteId);
+        allow create, update: if isCliente(clienteId) && validProduto(produtoId);
+        allow delete: if isCliente(clienteId);
+      }
+
+      match /movimentacoes/{movimentacaoId} {
+        allow read: if isCliente(clienteId);
+        allow create, update: if isCliente(clienteId) && validMovimentacao(movimentacaoId);
+        allow delete: if isCliente(clienteId);
+      }
     }
 
   }
