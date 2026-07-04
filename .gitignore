@@ -19,6 +19,20 @@ functions/node_modules/
 
 # Env
 .env
+.env.*
+!.env.example
+!.env.*.example
+functions/.env
+functions/.env.*
+!functions/.env.example
+!functions/.env.*.example
+
+# Credenciais / configs locais
+serviceAccount*.json
+*service-account*.json
+firebase-adminsdk*.json
+.runtimeconfig.json
+functions/.runtimeconfig.json
 
 # Cache / cobertura
 coverage
