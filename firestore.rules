@@ -2,8 +2,58 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function validString(value, maxLength) {
+      return value is string && value.size() > 0 && value.size() <= maxLength;
+    }
+
+    function validOptionalString(value, maxLength) {
+      return value is string && value.size() <= maxLength;
+    }
+
+    function validProduto(produtoId) {
+      return request.resource.data.keys().hasOnly([
+        'id', 'nome', 'categoria', 'quantidade', 'minimo', 'preco', 'descricao'
+      ])
+      && request.resource.data.id == produtoId
+      && validString(request.resource.data.nome, 120)
+      && validString(request.resource.data.categoria, 80)
+      && request.resource.data.quantidade is int
+      && request.resource.data.quantidade >= 0
+      && request.resource.data.minimo is int
+      && request.resource.data.minimo >= 0
+      && request.resource.data.preco is number
+      && request.resource.data.preco >= 0
+      && validOptionalString(request.resource.data.descricao, 500);
+    }
+
+    function validMovimentacao(movimentacaoId) {
+      return request.resource.data.keys().hasOnly([
+        'id', 'produtoId', 'produtoNome', 'tipo', 'quantidade', 'observacao', 'data'
+      ])
+      && request.resource.data.id == movimentacaoId
+      && validString(request.resource.data.produtoId, 80)
+      && validString(request.resource.data.produtoNome, 120)
+      && request.resource.data.tipo in ['entrada', 'saida']
+      && request.resource.data.quantidade is int
+      && request.resource.data.quantidade > 0
+      && validOptionalString(request.resource.data.observacao, 300)
+      && validString(request.resource.data.data, 40);
+    }
+
     match /produtos/{produtoId} {
-      allow read, write: if true;
+      allow read: if signedIn();
+      allow create, update: if signedIn() && validProduto(produtoId);
+      allow delete: if signedIn();
+    }
+
+    match /movimentacoes/{movimentacaoId} {
+      allow read: if signedIn();
+      allow create, update: if signedIn() && validMovimentacao(movimentacaoId);
+      allow delete: if signedIn();
     }
 
   }

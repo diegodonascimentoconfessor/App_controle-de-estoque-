@@ -1,18 +1,104 @@
+// Importações necessárias do Firebase SDK (Versão Web Modular v9+)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
+import {
+  getAuth,
+  signInAnonymously
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  onSnapshot 
+} from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+// Sua configuração do Firebase (Mantida idêntica)
+const firebaseConfig = {
+  apiKey: "AIzaSyCr8R25YBzIEpETQiKatgMJOhzwSXBZPeM",
+  authDomain: "controleestoque-eefc1.firebaseapp.com",
+  projectId: "controleestoque-eefc1",
+  storageBucket: "controleestoque-eefc1.firebasestorage.app",
+  messagingSenderId: "1069327180647",
+  appId: "1:1069327180647:web:26ef067e273a0854e685c2",
+  measurementId: "G-PCQEHT6X20"
+};
+
+// Inicializa o Firebase e o Firestore
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
 /* ===== ESTADO ===== */
 const state = {
   produtos: [],
   movimentacoes: [],
 };
 
-/* ===== LOCAL STORAGE ===== */
-function salvar() {
-  localStorage.setItem('estoqueapp_produtos', JSON.stringify(state.produtos));
-  localStorage.setItem('estoqueapp_movimentacoes', JSON.stringify(state.movimentacoes));
+/* ===== SINCRONIZAÇÃO EM TEMPO REAL (FIRESTORE) ===== */
+async function autenticarAnonimamente() {
+  try {
+    await signInAnonymously(auth);
+  } catch (error) {
+    console.error("Erro ao autenticar: ", error);
+    toast("Ative a autenticação anônima no Firebase para usar o sistema.", "error");
+    throw error;
+  }
 }
 
-function carregar() {
-  state.produtos = JSON.parse(localStorage.getItem('estoqueapp_produtos') || '[]');
-  state.movimentacoes = JSON.parse(localStorage.getItem('estoqueapp_movimentacoes') || '[]');
+// Substitui a antiga função carregar(). Fica escutando as mudanças no banco.
+function iniciarSincronizacao() {
+  // Escuta a coleção de produtos
+  onSnapshot(collection(db, "produtos"), (snapshot) => {
+    state.produtos = [];
+    snapshot.forEach((doc) => {
+      state.produtos.push({ id: doc.id, ...doc.data() });
+    });
+    // Força a atualização da tela em que o usuário está trabalhando
+    renderizarPagina(paginaAtiva());
+    atualizarBadgeAlertas();
+  }, (error) => {
+    console.error("Erro ao sincronizar produtos: ", error);
+    toast("Sem permissão para ler os produtos.", "error");
+  });
+
+  // Escuta a coleção de movimentações
+  onSnapshot(collection(db, "movimentacoes"), (snapshot) => {
+    state.movimentacoes = [];
+    snapshot.forEach((doc) => {
+      state.movimentacoes.push({ id: doc.id, ...doc.data() });
+    });
+    renderizarPagina(paginaAtiva());
+  }, (error) => {
+    console.error("Erro ao sincronizar movimentações: ", error);
+    toast("Sem permissão para ler as movimentações.", "error");
+  });
+}
+
+// Funções para salvar/deletar diretamente no banco de dados
+async function dbSalvarProduto(produto) {
+  try {
+    await setDoc(doc(db, "produtos", produto.id), produto);
+  } catch (error) {
+    console.error("Erro ao salvar produto: ", error);
+    toast("Erro ao conectar com o servidor.", "error");
+  }
+}
+
+async function dbExcluirProduto(id) {
+  try {
+    await deleteDoc(doc(db, "produtos", id));
+  } catch (error) {
+    console.error("Erro ao excluir produto: ", error);
+  }
+}
+
+async function dbSalvarMovimentacao(mov) {
+  try {
+    await setDoc(doc(db, "movimentacoes", mov.id), mov);
+  } catch (error) {
+    console.error("Erro ao salvar movimentação: ", error);
+  }
 }
 
 /* ===== UTILITÁRIOS ===== */
@@ -39,6 +125,20 @@ function toast(msg, tipo = 'success') {
   toast._t = setTimeout(() => el.classList.remove('show'), 3000);
 }
 
+function escapeHTML(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  }[char]));
+}
+
+function escapeJSString(value) {
+  return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 /* ===== NAVEGAÇÃO ===== */
 function navegarPara(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -57,6 +157,45 @@ function navegarPara(page) {
 
   fecharSidebar();
   renderizarPagina(page);
+}
+
+// Disponibilizado globalmente para os botões do HTML que usam onclick
+window.abrirModalMov = function(produtoId) {
+  const produto = state.produtos.find(p => p.id === produtoId);
+  if (!produto) return;
+
+  document.getElementById('movProdutoId').value = produtoId;
+  document.getElementById('movProdutoNome').textContent = produto.nome;
+  document.getElementById('movQtd').value = '1';
+  document.getElementById('movObs').value = '';
+
+  document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+  document.querySelector('.toggle-btn[data-tipo="entrada"]').classList.add('active');
+  document.getElementById('movTipo').value = 'entrada';
+
+  document.getElementById('modalMov').classList.add('open');
+  setTimeout(() => document.getElementById('movQtd').focus(), 100);
+}
+
+window.editarProduto = function(id) {
+  const p = state.produtos.find(p => p.id === id);
+  if (!p) return;
+
+  document.getElementById('produtoId').value = p.id;
+  document.getElementById('inputNome').value = p.nome;
+  document.getElementById('inputCategoria').value = p.categoria;
+  document.getElementById('inputQtd').value = p.quantidade;
+  document.getElementById('inputMin').value = p.minimo;
+  document.getElementById('inputPreco').value = p.preco;
+  document.getElementById('inputDesc').value = p.descricao || '';
+  document.getElementById('modalTitulo').textContent = 'Editar Produto';
+  document.getElementById('modalProduto').classList.add('open');
+}
+
+window.excluirProduto = function(id) {
+  if (!confirm('Tem certeza que deseja excluir este produto?')) return;
+  dbExcluirProduto(id);
+  toast('Produto excluído.');
 }
 
 function renderizarPagina(page) {
@@ -105,9 +244,9 @@ function renderDashboard() {
     empty.style.display = 'none';
     tbody.innerHTML = movRecentes.map(m => `
       <tr>
-        <td>${m.produtoNome}</td>
-        <td><span class="tag tag--${m.tipo}">${m.tipo === 'entrada' ? '↑ Entrada' : '↓ Saída'}</span></td>
-        <td>${m.quantidade}</td>
+        <td>${escapeHTML(m.produtoNome)}</td>
+        <td><span class="tag tag--${m.tipo === 'entrada' ? 'entrada' : 'saida'}">${m.tipo === 'entrada' ? '↑ Entrada' : '↓ Saída'}</span></td>
+        <td>${escapeHTML(m.quantidade)}</td>
         <td>${formatarData(m.data)}</td>
       </tr>
     `).join('');
@@ -135,11 +274,10 @@ function renderProdutos() {
   const empty = document.getElementById('emptyProdutos');
   const filterCat = document.getElementById('filterCategoria');
 
-  // Categorias únicas
   const cats = [...new Set(state.produtos.map(p => p.categoria))].sort();
   const catAtual = filterCat.value;
   filterCat.innerHTML = '<option value="">Todas as categorias</option>' +
-    cats.map(c => `<option value="${c}" ${c === catAtual ? 'selected' : ''}>${c}</option>`).join('');
+    cats.map(c => `<option value="${escapeHTML(c)}" ${c === catAtual ? 'selected' : ''}>${escapeHTML(c)}</option>`).join('');
 
   if (lista.length === 0) {
     tbody.innerHTML = '';
@@ -148,48 +286,25 @@ function renderProdutos() {
     empty.style.display = 'none';
     tbody.innerHTML = lista.map(p => {
       const critico = p.quantidade <= p.minimo;
+      const produtoId = escapeJSString(p.id);
       return `
         <tr>
-          <td><strong>${p.nome}</strong><br><small style="color:var(--text2)">${p.descricao || ''}</small></td>
-          <td>${p.categoria}</td>
+          <td><strong>${escapeHTML(p.nome)}</strong><br><small style="color:var(--text2)">${escapeHTML(p.descricao || '')}</small></td>
+          <td>${escapeHTML(p.categoria)}</td>
           <td>
-            <span class="tag tag--${critico ? 'critico' : 'ok'}">${p.quantidade}</span>
+            <span class="tag tag--${critico ? 'critico' : 'ok'}">${escapeHTML(p.quantidade)}</span>
           </td>
-          <td>${p.minimo}</td>
+          <td>${escapeHTML(p.minimo)}</td>
           <td>${formatarPreco(p.preco)}</td>
           <td>
-            <button class="action-btn" onclick="abrirModalMov('${p.id}')">⇅ Mov.</button>
-            <button class="action-btn" onclick="editarProduto('${p.id}')">✎ Editar</button>
-            <button class="action-btn danger" onclick="excluirProduto('${p.id}')">✕</button>
+            <button class="action-btn" onclick="abrirModalMov('${produtoId}')">⇅ Mov.</button>
+            <button class="action-btn" onclick="editarProduto('${produtoId}')">✎ Editar</button>
+            <button class="action-btn danger" onclick="excluirProduto('${produtoId}')">✕</button>
           </td>
         </tr>
       `;
     }).join('');
   }
-}
-
-function editarProduto(id) {
-  const p = state.produtos.find(p => p.id === id);
-  if (!p) return;
-
-  document.getElementById('produtoId').value = p.id;
-  document.getElementById('inputNome').value = p.nome;
-  document.getElementById('inputCategoria').value = p.categoria;
-  document.getElementById('inputQtd').value = p.quantidade;
-  document.getElementById('inputMin').value = p.minimo;
-  document.getElementById('inputPreco').value = p.preco;
-  document.getElementById('inputDesc').value = p.descricao || '';
-  document.getElementById('modalTitulo').textContent = 'Editar Produto';
-  document.getElementById('modalProduto').classList.add('open');
-}
-
-function excluirProduto(id) {
-  if (!confirm('Tem certeza que deseja excluir este produto?')) return;
-  state.produtos = state.produtos.filter(p => p.id !== id);
-  salvar();
-  renderProdutos();
-  atualizarBadgeAlertas();
-  toast('Produto excluído.');
 }
 
 /* ===== MOVIMENTAÇÕES ===== */
@@ -210,10 +325,10 @@ function renderMovimentacoes() {
     empty.style.display = 'none';
     tbody.innerHTML = sorted.map(m => `
       <tr>
-        <td>${m.produtoNome}</td>
-        <td><span class="tag tag--${m.tipo}">${m.tipo === 'entrada' ? '↑ Entrada' : '↓ Saída'}</span></td>
-        <td>${m.quantidade}</td>
-        <td>${m.observacao || '—'}</td>
+        <td>${escapeHTML(m.produtoNome)}</td>
+        <td><span class="tag tag--${m.tipo === 'entrada' ? 'entrada' : 'saida'}">${m.tipo === 'entrada' ? '↑ Entrada' : '↓ Saída'}</span></td>
+        <td>${escapeHTML(m.quantidade)}</td>
+        <td>${escapeHTML(m.observacao || '—')}</td>
         <td>${formatarData(m.data)}</td>
       </tr>
     `).join('');
@@ -234,12 +349,12 @@ function renderAlertas() {
     lista.innerHTML = criticos.map(p => `
       <div class="alerta-card">
         <div class="alerta-info">
-          <div class="alerta-nome">${p.nome}</div>
+          <div class="alerta-nome">${escapeHTML(p.nome)}</div>
           <div class="alerta-detalhe">
-            Categoria: ${p.categoria} · Estoque atual: <strong>${p.quantidade}</strong> · Mínimo: <strong>${p.minimo}</strong>
+            Categoria: ${escapeHTML(p.categoria)} · Estoque atual: <strong>${escapeHTML(p.quantidade)}</strong> · Mínimo: <strong>${escapeHTML(p.minimo)}</strong>
           </div>
         </div>
-        <button class="btn-primary" onclick="abrirModalMov('${p.id}')">+ Entrada</button>
+        <button class="btn-primary" onclick="abrirModalMov('${escapeJSString(p.id)}')">+ Entrada</button>
       </div>
     `).join('');
   }
@@ -263,10 +378,9 @@ function abrirModalNovoProduto() {
   document.getElementById('inputDesc').value = '';
   document.getElementById('modalTitulo').textContent = 'Novo Produto';
 
-  // Atualizar datalist categorias
   const cats = [...new Set(state.produtos.map(p => p.categoria))].sort();
   document.getElementById('categoriasList').innerHTML =
-    cats.map(c => `<option value="${c}">`).join('');
+    cats.map(c => `<option value="${escapeHTML(c)}">`).join('');
 
   document.getElementById('modalProduto').classList.add('open');
   setTimeout(() => document.getElementById('inputNome').focus(), 100);
@@ -283,47 +397,22 @@ function salvarProduto() {
   const minimo = parseInt(document.getElementById('inputMin').value) || 0;
   const preco = parseFloat(document.getElementById('inputPreco').value) || 0;
   const descricao = document.getElementById('inputDesc').value.trim();
-  const id = document.getElementById('produtoId').value;
+  let id = document.getElementById('produtoId').value;
 
   if (!nome) { toast('Informe o nome do produto.', 'error'); return; }
   if (!categoria) { toast('Informe a categoria.', 'error'); return; }
 
-  if (id) {
-    const idx = state.produtos.findIndex(p => p.id === id);
-    if (idx >= 0) {
-      state.produtos[idx] = { ...state.produtos[idx], nome, categoria, quantidade, minimo, preco, descricao };
-    }
-    toast('Produto atualizado!');
-  } else {
-    state.produtos.push({ id: gerarId(), nome, categoria, quantidade, minimo, preco, descricao });
-    toast('Produto cadastrado!');
-  }
+  if (!id) id = gerarId();
 
-  salvar();
+  const produtoDados = { id, nome, categoria, quantidade, minimo, preco, descricao };
+  
+  dbSalvarProduto(produtoDados);
+  toast(document.getElementById('produtoId').value ? 'Produto atualizado!' : 'Produto cadastrado!');
+
   fecharModalProduto();
-  renderizarPagina(paginaAtiva());
-  atualizarBadgeAlertas();
 }
 
 /* ===== MODAL MOVIMENTAÇÃO ===== */
-function abrirModalMov(produtoId) {
-  const produto = state.produtos.find(p => p.id === produtoId);
-  if (!produto) return;
-
-  document.getElementById('movProdutoId').value = produtoId;
-  document.getElementById('movProdutoNome').textContent = produto.nome;
-  document.getElementById('movQtd').value = '1';
-  document.getElementById('movObs').value = '';
-
-  // Reset toggle
-  document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
-  document.querySelector('.toggle-btn[data-tipo="entrada"]').classList.add('active');
-  document.getElementById('movTipo').value = 'entrada';
-
-  document.getElementById('modalMov').classList.add('open');
-  setTimeout(() => document.getElementById('movQtd').focus(), 100);
-}
-
 function fecharModalMov() {
   document.getElementById('modalMov').classList.remove('open');
 }
@@ -336,23 +425,21 @@ function salvarMovimentacao() {
 
   if (!quantidade || quantidade <= 0) { toast('Informe uma quantidade válida.', 'error'); return; }
 
-  const idx = state.produtos.findIndex(p => p.id === produtoId);
-  if (idx < 0) return;
-
-  const produto = state.produtos[idx];
+  const produto = state.produtos.find(p => p.id === produtoId);
+  if (!produto) return;
 
   if (tipo === 'saida' && produto.quantidade < quantidade) {
     toast(`Estoque insuficiente! Disponível: ${produto.quantidade}`, 'error');
     return;
   }
 
-  if (tipo === 'entrada') {
-    state.produtos[idx].quantidade = produto.quantidade + quantidade;
-  } else {
-    state.produtos[idx].quantidade = produto.quantidade - quantidade;
-  }
+  const novaQuantidade = tipo === 'entrada' ? produto.quantidade + quantidade : produto.quantidade - quantidade;
 
-  state.movimentacoes.push({
+  // 1. Atualiza a quantidade do produto
+  dbSalvarProduto({ ...produto, quantidade: novaQuantidade });
+
+  // 2. Registra o histórico da movimentação
+  dbSalvarMovimentacao({
     id: gerarId(),
     produtoId,
     produtoNome: produto.nome,
@@ -362,10 +449,7 @@ function salvarMovimentacao() {
     data: new Date().toISOString()
   });
 
-  salvar();
   fecharModalMov();
-  renderizarPagina(paginaAtiva());
-  atualizarBadgeAlertas();
   toast(`${tipo === 'entrada' ? 'Entrada' : 'Saída'} registrada com sucesso!`);
 }
 
@@ -376,8 +460,10 @@ function paginaAtiva() {
 }
 
 /* ===== INICIALIZAÇÃO ===== */
-function init() {
-  carregar();
+async function init() {
+  // Inicializa o ouvinte em tempo real do Firebase
+  await autenticarAnonimamente();
+  iniciarSincronizacao();
 
   // Nav
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -400,7 +486,6 @@ function init() {
   document.getElementById('btnCancelarProduto').addEventListener('click', fecharModalProduto);
   document.getElementById('btnSalvarProduto').addEventListener('click', salvarProduto);
 
-  // Fechar modal clicando fora
   document.getElementById('modalProduto').addEventListener('click', e => {
     if (e.target === document.getElementById('modalProduto')) fecharModalProduto();
   });
@@ -429,9 +514,8 @@ function init() {
 
   // Filtro movimentações
   document.getElementById('filterTipoMov').addEventListener('change', renderMovimentacoes);
-
-  // Render inicial
-  renderDashboard();
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  init().catch((error) => console.error("Erro ao iniciar aplicação: ", error));
+});
