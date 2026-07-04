@@ -14,6 +14,14 @@ service cloud.firestore {
       return value is string && value.size() <= maxLength;
     }
 
+    function validQuantidade(value) {
+      return value is int && value >= 0 && value <= 1000000;
+    }
+
+    function validPreco(value) {
+      return value is number && value >= 0 && value <= 1000000;
+    }
+
     function validProduto(produtoId) {
       return request.resource.data.keys().hasOnly([
         'id', 'nome', 'categoria', 'quantidade', 'minimo', 'preco', 'descricao'
@@ -21,12 +29,9 @@ service cloud.firestore {
       && request.resource.data.id == produtoId
       && validString(request.resource.data.nome, 120)
       && validString(request.resource.data.categoria, 80)
-      && request.resource.data.quantidade is int
-      && request.resource.data.quantidade >= 0
-      && request.resource.data.minimo is int
-      && request.resource.data.minimo >= 0
-      && request.resource.data.preco is number
-      && request.resource.data.preco >= 0
+      && validQuantidade(request.resource.data.quantidade)
+      && validQuantidade(request.resource.data.minimo)
+      && validPreco(request.resource.data.preco)
       && validOptionalString(request.resource.data.descricao, 500);
     }
 
@@ -40,6 +45,7 @@ service cloud.firestore {
       && request.resource.data.tipo in ['entrada', 'saida']
       && request.resource.data.quantidade is int
       && request.resource.data.quantidade > 0
+      && request.resource.data.quantidade <= 1000000
       && validOptionalString(request.resource.data.observacao, 300)
       && validString(request.resource.data.data, 40);
     }
